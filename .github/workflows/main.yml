@@ -1,16 +1,15 @@
-name: Realtime Betradar Sync
+name: Betradar Update
 on:
   schedule:
-    - cron: '*/20 * * * *' # 20 percenként indít egy új botot
-  workflow_dispatch: # Manuális indítás gomb
+    - cron: '*/15 * * * *' # 15 percenként fut le
+  workflow_dispatch:
 jobs:
-  update-data:
+  run-bot:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with: { python-version: '3.9' }
       - run: pip install selenium webdriver-manager
       - run: python bot.py
         env:
