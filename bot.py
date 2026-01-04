@@ -29,11 +29,13 @@ def upload_to_ftp(content):
     FTP_HOST = os.getenv("FTP_HOST")
     FTP_USER = os.getenv("FTP_USER")
     FTP_PASS = os.getenv("FTP_PASS")
-    
+    TARGET_DIRECTORY = "uj"
     with open("season.txt", "w") as f:
         f.write(content)
     
     session = ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS)
+    if TARGET_DIRECTORY:
+        session.cwd(TARGET_DIRECTORY)
     with open("season.txt", "rb") as f:
         session.storbinary("STOR season.txt", f)
     session.quit()
