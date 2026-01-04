@@ -1,12 +1,13 @@
 import os
 import time
 import ftplib
+import json
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
-def get_id():
+def get_live_data():
     options = Options()
     options.add_argument("--headless")
     options.add_argument("--no-sandbox")
@@ -17,33 +18,50 @@ def get_id():
     
     try:
         driver.get(url)
-        time.sleep(15) # Várunk a shared.js-re
-        # A nyerő parancsod:
-        season_id = driver.execute_script("return app.timeline.currentChunkModel.chunk.competition.id;")
-        return str(season_id)
+        time.sleep(15) # Megvárjuk, amíg az app felépül
+        
+        # Ez a parancs egyszerre kéri le a Szezon ID-t és az aktuális fordulót (chunk nr)
+        nyero_parancs = """
+        return [
+            app.timeline.currentChunkModel.chunk.competition.id,
+            app.timeline.currentChunkModel.chunk.nr
+        ];
+        """
+        data = driver.execute_script(nyero_parancs)
+        return {"seasonId": str(data[0]), "round": str(data[1])}
+    except Exception as e:
+        print(f"Hiba a kiolvasásnál: {e}")
+        return None
     finally:
         driver.quit()
 
-def upload_to_ftp(content):
-    # Az adatokat a GitHub titkosított tárolójából (Secrets) vesszük
+def upload_to_ftp(data_dict):
     FTP_HOST = os.getenv("FTP_HOST")
     FTP_USER = os.getenv("FTP_USER")
     FTP_PASS = os.getenv("FTP_PASS")
-    TARGET_DIRECTORY = "uj"
-    with open("season.txt", "w") as f:
-        f.write(content)
     
-    session = ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS)
-    if TARGET_DIRECTORY:
-        session.cwd(TARGET_DIRECTORY)
-    with open("season.txt", "rb") as f:
-        session.storbinary("STOR season.txt", f)
-    session.quit()
-    print("Siker! ID feltöltve.")
+    # IDE ÍRD A MAPPA NEVÉT, ha szükséges (pl: "public_html/adatok")
+    TARGET_DIRECTORY = "" 
+
+    # JSON-be csomagoljuk az adatokat, hogy a HTML könnyen olvassa
+    with open("season_info.json", "w") as f:
+        json.dump(data_dict, f)
+    
+    try:
+        session = ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS)
+        if TARGET_DIRECTORY:
+            session.cwd(TARGET_DIRECTORY)
+            
+        with open("season_info.json", "rb") as f:
+            session.storbinary("STOR season_info.json", f)
+        session.quit()
+        print(f"Siker! Adatok feltöltve: {data_dict}")
+    except Exception as e:
+        print(f"FTP hiba: {e}")
 
 if __name__ == "__main__":
-    sid = get_id()
-    if sid and sid != "None":
-        upload_to_ftp(sid)
+    live_data = get_live_data()
+    if live_data and live_data['seasonId'] != "None":
+        upload_to_ftp(live_data)
     else:
-        print("Nem sikerült kinyerni az ID-t.")
+        print("Nem sikerült adatot kinyerni.")
