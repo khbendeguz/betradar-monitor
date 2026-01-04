@@ -1,0 +1,24 @@
+name: Betradar Monitor Update
+on:
+  schedule:
+    - cron: '*/15 * * * *' # 15 percenként fut
+  workflow_dispatch: # Kézzel is elindíthatod
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout kód
+        uses: actions/checkout@v2
+      - name: Python beállítása
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+      - name: Függőségek telepítése
+        run: pip install selenium webdriver-manager
+      - name: Robot futtatása
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASS: ${{ secrets.FTP_PASS }}
+        run: python bot.py
