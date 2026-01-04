@@ -7,7 +7,28 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
-def get_live_data():
+def upload_to_ftp(data_dict):
+    try:
+        FTP_HOST = os.getenv("FTP_HOST")
+        FTP_USER = os.getenv("FTP_USER")
+        FTP_PASS = os.getenv("FTP_PASS")
+        
+        # A fájl neve az FTP-n
+        filename = "season_info.json"
+        with open(filename, "w") as f:
+            json.dump(data_dict, f)
+        
+        session = ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS)
+        # Ha alkönyvtárba tennéd: session.cwd("monitor_mappa")
+        with open(filename, "rb") as f:
+            session.storbinary(f"STOR {filename}", f)
+        session.quit()
+        return True
+    except Exception as e:
+        print(f"FTP Hiba: {e}")
+        return False
+
+if __name__ == "__main__":
     options = Options()
     options.add_argument("--headless")
     options.add_argument("--no-sandbox")
@@ -18,50 +39,31 @@ def get_live_data():
     
     try:
         driver.get(url)
-        time.sleep(15) # Megvárjuk, amíg az app felépül
+        time.sleep(15) # Vár az oldal betöltésére
         
-        # Ez a parancs egyszerre kéri le a Szezon ID-t és az aktuális fordulót (chunk nr)
-        nyero_parancs = """
-        return [
-            app.timeline.currentChunkModel.chunk.competition.id,
-            app.timeline.currentChunkModel.chunk.nr
-        ];
-        """
-        data = driver.execute_script(nyero_parancs)
-        return {"seasonId": str(data[0]), "round": str(data[1])}
-    except Exception as e:
-        print(f"Hiba a kiolvasásnál: {e}")
-        return None
+        # 30 PERCES CIKLUS: Percenként frissít
+        for i in range(30):
+            try:
+                # Lekérjük az adatokat a te nyerő parancsoddal
+                data = driver.execute_script("""
+                    try {
+                        return {
+                            "seasonId": app.timeline.currentChunkModel.chunk.competition.id,
+                            "round": app.timeline.currentChunkModel.chunk.nr,
+                            "timestamp": Math.floor(Date.now() / 1000)
+                        };
+                    } catch(e) { return null; }
+                """)
+
+                if data:
+                    upload_to_ftp(data)
+                    print(f"Frissítve ({i+1}/30): Season {data['seasonId']}, Round {data['round']}")
+                else:
+                    print("Hiba: Az app objektum nem elérhető.")
+            except Exception as e:
+                print(f"Hiba a ciklusban: {e}")
+            
+            time.sleep(60) # Vár 1 percet a következő frissítésig
+            
     finally:
         driver.quit()
-
-def upload_to_ftp(data_dict):
-    FTP_HOST = os.getenv("FTP_HOST")
-    FTP_USER = os.getenv("FTP_USER")
-    FTP_PASS = os.getenv("FTP_PASS")
-    
-    # IDE ÍRD A MAPPA NEVÉT, ha szükséges (pl: "public_html/adatok")
-    TARGET_DIRECTORY = "" 
-
-    # JSON-be csomagoljuk az adatokat, hogy a HTML könnyen olvassa
-    with open("season_info.json", "w") as f:
-        json.dump(data_dict, f)
-    
-    try:
-        session = ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS)
-        if TARGET_DIRECTORY:
-            session.cwd(TARGET_DIRECTORY)
-            
-        with open("season_info.json", "rb") as f:
-            session.storbinary("STOR season_info.json", f)
-        session.quit()
-        print(f"Siker! Adatok feltöltve: {data_dict}")
-    except Exception as e:
-        print(f"FTP hiba: {e}")
-
-if __name__ == "__main__":
-    live_data = get_live_data()
-    if live_data and live_data['seasonId'] != "None":
-        upload_to_ftp(live_data)
-    else:
-        print("Nem sikerült adatot kinyerni.")
