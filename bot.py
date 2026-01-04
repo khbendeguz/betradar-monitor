@@ -47,7 +47,7 @@ def upload_ftp(sid):
         session = ftplib.FTP(host, user, pw)
         
         # IDE ÍRD A MAPPA NEVÉT, ha nem a főkönyvtárba megy
-        # session.cwd("public_html/valami") 
+        session.cwd("uj") 
         
         with open("season.txt", "rb") as f:
             session.storbinary("STOR season.txt", f)
